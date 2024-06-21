@@ -1,4 +1,4 @@
-package org.pba;
+package com.pba;
 
 import com.sun.tools.attach.VirtualMachine;
 import javax.management.MBeanServerConnection;
@@ -22,36 +22,49 @@ public class JMXThreadInspector {
 
         try {
             // Attach to the target JVM
+            System.out.println("Attaching to JVM with PID: " + pid);
             VirtualMachine vm = VirtualMachine.attach(pid);
-            try {
-                vm.loadAgentLibrary("management-agent");
-            } catch (Exception e) {
-                vm.loadAgentLibrary("jmx.agent");
-            }
+            System.out.println("Attached to JVM successfully.");
 
-            // Get the connector address
+            // Check if the JMX agent is already loaded
+            System.out.println("Checking if JMX agent is already loaded...");
             String connectorAddress = vm.getAgentProperties().getProperty("com.sun.management.jmxremote.localConnectorAddress");
-
             if (connectorAddress == null) {
-                System.err.println("JMX connector address not found.");
-                System.exit(1);
+                System.out.println("JMX agent not loaded. Enabling JMX...");
+
+                // Set the required properties to enable JMX
+                vm.startLocalManagementAgent();
+
+                // Retrieve the connector address again
+                connectorAddress = vm.getAgentProperties().getProperty("com.sun.management.jmxremote.localConnectorAddress");
+                if (connectorAddress == null) {
+                    throw new IllegalStateException("Failed to enable JMX and obtain connector address.");
+                }
             }
+
+            System.out.println("JMX connector address: " + connectorAddress);
 
             // Connect to the MBean server
+            System.out.println("Connecting to the MBean server...");
             JMXServiceURL url = new JMXServiceURL(connectorAddress);
             Map<String, Object> env = new HashMap<>();
             JMXConnector connector = JMXConnectorFactory.connect(url, env);
             MBeanServerConnection mbsc = connector.getMBeanServerConnection();
+            System.out.println("Connected to the MBean server successfully.");
 
             // Get the ThreadMXBean
+            System.out.println("Retrieving ThreadMXBean...");
             ThreadMXBean threadMXBean = ManagementFactory.newPlatformMXBeanProxy(
                     mbsc, ManagementFactory.THREAD_MXBEAN_NAME, ThreadMXBean.class);
+            System.out.println("ThreadMXBean retrieved successfully.");
 
             // Retrieve thread information
+            System.out.println("Retrieving thread information...");
             long[] threadIds = threadMXBean.getAllThreadIds();
             ThreadInfo[] threadInfos = threadMXBean.getThreadInfo(threadIds);
 
             // Print thread information
+            System.out.println("Printing thread information:");
             for (ThreadInfo threadInfo : threadInfos) {
                 if (threadInfo != null) {
                     System.out.println("Thread ID: " + threadInfo.getThreadId());
@@ -64,8 +77,11 @@ public class JMXThreadInspector {
             }
 
             // Detach from the JVM
+            System.out.println("Detaching from JVM...");
             vm.detach();
+            System.out.println("Detached from JVM successfully.");
         } catch (Exception e) {
+            System.err.println("Error occurred:");
             e.printStackTrace();
         }
     }
